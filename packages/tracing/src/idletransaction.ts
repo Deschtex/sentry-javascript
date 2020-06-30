@@ -56,6 +56,8 @@ export class IdleTransaction extends Transaction {
 
   private _heartbeatCounter: number = 0;
 
+  private _finishCallback: Function | undefined = undefined;
+
   public constructor(transactionContext: TransactionContext, hub?: Hub, idleTimeout: number = 500) {
     super(transactionContext, hub);
     this._idleTimeout = idleTimeout;
@@ -109,6 +111,10 @@ export class IdleTransaction extends Transaction {
    */
   private _finishIdleTransaction(endTimestamp: number): void {
     if (this.spanRecorder) {
+      if (this._finishCallback) {
+        this._finishCallback(this);
+      }
+
       this.spanRecorder.spans = this.spanRecorder.spans.filter((span: Span) => {
         // If we are dealing with the transaction itself, we just return it
         if (span.spanId === this.spanId) {
@@ -134,7 +140,6 @@ export class IdleTransaction extends Transaction {
 
       logger.log('[Tracing] flushing IdleTransaction');
       this.finish();
-      this._finished = true;
     } else {
       logger.log('[Tracing] No active IdleTransaction');
     }
@@ -168,6 +173,13 @@ export class IdleTransaction extends Transaction {
         this._finishIdleTransaction(end);
       }, timeout);
     }
+  }
+
+  /**
+   * Register a callback function that gets excecuted before the transaction finishes
+   */
+  public beforeFinish(callback: (transactionSpan: IdleTransaction) => void): void {
+    this._finishCallback = callback;
   }
 
   /**

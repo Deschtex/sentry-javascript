@@ -1,5 +1,5 @@
 import { BrowserClient } from '@sentry/browser';
-import { Hub, Scope } from '@sentry/hub';
+import { Hub } from '@sentry/hub';
 
 import { IdleTransaction, IdleTransactionSpanRecorder } from '../src/idletransaction';
 import { Span } from '../src/span';
