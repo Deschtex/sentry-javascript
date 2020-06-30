@@ -55,6 +55,11 @@ export interface RoutingInstrumentation {
    * init the routing instrumentation
    */
   init(hub: Hub, idleTimeout: number, beforeFinish?: (transactionSpan: IdleTransaction) => void): void;
+
+  /**
+   * Start an idle transaction. Called by init().
+   */
+  startIdleTransaction(hub: Hub, op: 'pageload' | 'navigation', idleTimeout: number): IdleTransaction | undefined;
 }
 
 export type RoutingInstrumentationClass = new (_options?: TracingRouterOptions) => RoutingInstrumentation;
@@ -72,8 +77,14 @@ export class TracingRouter implements RoutingInstrumentation {
     }
   }
 
-  /** JSDOC */
-  private _startIdleTransaction(hub: Hub, op: string, idleTimeout: number): IdleTransaction | undefined {
+  /**
+   * Starts an idle transaction.
+   */
+  public startIdleTransaction(
+    hub: Hub,
+    op: 'pageload' | 'navigation',
+    idleTimeout: number,
+  ): IdleTransaction | undefined {
     if (!global || !global.location || !hub) {
       return undefined;
     }
@@ -107,7 +118,7 @@ export class TracingRouter implements RoutingInstrumentation {
    */
   public init(hub: Hub, idleTimeout: number, beforeFinish?: (transactionSpan: IdleTransaction) => void): void {
     if (this.options.startTransactionOnPageLoad) {
-      this._activeTransaction = this._startIdleTransaction(hub, 'pageload', idleTimeout);
+      this._activeTransaction = this.startIdleTransaction(hub, 'pageload', idleTimeout);
       if (this._activeTransaction && beforeFinish) {
         this._activeTransaction.beforeFinish(beforeFinish);
       }
@@ -119,7 +130,7 @@ export class TracingRouter implements RoutingInstrumentation {
           if (this._activeTransaction) {
             this._activeTransaction.finish(timestampWithMs());
           }
-          this._activeTransaction = this._startIdleTransaction(hub, 'navigation', idleTimeout);
+          this._activeTransaction = this.startIdleTransaction(hub, 'navigation', idleTimeout);
           if (this._activeTransaction && beforeFinish) {
             this._activeTransaction.beforeFinish(beforeFinish);
           }

@@ -11,6 +11,27 @@ describe('IdleTransaction', () => {
     hub = new Hub(new BrowserClient({ tracesSampleRate: 1 }));
   });
 
+  it('sets the transaction on the scope on creation', () => {
+    const transaction = new IdleTransaction({ name: 'foo' }, hub, 1000);
+    transaction.initSpanRecorder(10);
+
+    hub.configureScope(s => {
+      expect(s.getTransaction()).toBe(transaction);
+    });
+  });
+
+  it('removes transaction from scope on finish', () => {
+    const transaction = new IdleTransaction({ name: 'foo' }, hub, 1000);
+    transaction.initSpanRecorder(10);
+
+    transaction.finish();
+    jest.runAllTimers();
+
+    hub.configureScope(s => {
+      expect(s.getTransaction()).toBe(undefined);
+    });
+  });
+
   it('push and pops activities', () => {
     const mockFinish = jest.fn();
     const transaction = new IdleTransaction({ name: 'foo' }, hub, 1000);
@@ -25,8 +46,16 @@ describe('IdleTransaction', () => {
 
     span.finish();
     expect(transaction.activities).toMatchObject({});
-    jest.runOnlyPendingTimers();
 
+    jest.runOnlyPendingTimers();
+    expect(mockFinish).toHaveBeenCalledTimes(1);
+
+    // After we run all timers, we still want to make sure that
+    // transaction.finish() is only called once. This tells us that the
+    // heartbeat was stopped and that the `_finished` class
+    // property was used properly. This allows us to know if the
+    // heartbeat was correctly shut down.
+    jest.runAllTimers();
     expect(mockFinish).toHaveBeenCalledTimes(1);
   });
 

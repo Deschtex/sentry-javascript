@@ -56,6 +56,9 @@ export class IdleTransaction extends Transaction {
 
   private _heartbeatCounter: number = 0;
 
+  // We use heartbeat if we finished a transaction
+  private _finished: boolean = false;
+
   private _finishCallback: Function | undefined = undefined;
 
   private readonly _idleHub: Hub | undefined;
@@ -81,6 +84,10 @@ export class IdleTransaction extends Transaction {
    */
   private _beat(): void {
     clearTimeout(this._heartbeatTimer);
+    // We should not be running heartbeat if the idle transaction is finished.
+    if (this._finished) {
+      return;
+    }
     const keys = Object.keys(this.activities);
     const heartbeatString = keys.length ? keys.reduce((prev: string, current: string) => prev + current) : '';
 
@@ -122,7 +129,8 @@ export class IdleTransaction extends Transaction {
     if (this._idleHub) {
       const scope = this._idleHub.getScope();
       if (scope) {
-        if (scope.getSpan() === this) {
+        const span = scope.getSpan();
+        if (span && span.spanId === this.spanId) {
           scope.setSpan(undefined);
         }
       }
@@ -163,6 +171,7 @@ export class IdleTransaction extends Transaction {
 
       logger.log('[Tracing] flushing IdleTransaction');
       this.finish();
+      this._finished = true;
       this._resetActiveTransaction();
     } else {
       logger.log('[Tracing] No active IdleTransaction');
@@ -200,7 +209,8 @@ export class IdleTransaction extends Transaction {
   }
 
   /**
-   * Register a callback function that gets excecuted before the transaction finishes
+   * Register a callback function that gets excecuted before the transaction finishes.
+   * Useful for cleanup or if you want to add any additional spans based on current context.
    */
   public beforeFinish(callback: (transactionSpan: IdleTransaction) => void): void {
     this._finishCallback = callback;

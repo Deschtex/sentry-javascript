@@ -1,22 +1,14 @@
 import { Hub } from '@sentry/hub';
-import { Event, EventProcessor, Integration, Severity, TransactionContext } from '@sentry/types';
+import { Event, EventProcessor, Integration, Severity } from '@sentry/types';
 import { logger, safeJoin } from '@sentry/utils';
 
+import { IdleTransaction } from '../idletransaction';
 import { SpanStatus } from '../spanstatus';
-import { Transaction } from '../transaction';
 
-import {
-  RoutingInstrumentationClass,
-  RoutingInstrumentation,
-  TracingRouterOptions,
-  TracingRouter,
-} from './tracing/router';
+import { RoutingInstrumentationClass, TracingRouter, TracingRouterOptions } from './tracing/router';
 import { Location as LocationType } from './tracing/types';
 
 /**
- * TODO: Figure out Tracing._resetActiveTransaction()
- *  - No clue :/
- *  - Maybe on finish, all transactions should remove themselves off the scope?
  * TODO: Figure out Tracing.finishIdleTransaction()
  *  - Need beforeFinish() transaction hook here
  * TODO: Figure out both XHR and Fetch tracing
@@ -148,7 +140,11 @@ export class BrowserTracing implements Integration {
       startTransactionOnPageLoad,
     });
 
-    routerTracing.init(hub, idleTimeout);
+    const beforeFinish = (transactionSpan: IdleTransaction): void => {
+      // BrowserTracing._beforeFinish(transactionSpan);
+    };
+
+    routerTracing.init(hub, idleTimeout, beforeFinish);
 
     // This EventProcessor makes sure that the transaction is not longer than maxTransactionDuration
     addGlobalEventProcessor((event: Event) => {
@@ -184,6 +180,15 @@ export class BrowserTracing implements Integration {
       return event;
     });
   }
+
+  /**
+   * Called before the idle transaction finishes
+   * {@see IdleTransaction.beforeFinish}
+   */
+  // private static _beforeFinish(transaction: IdleTransaction): void {
+  //   this._checkIfOutdated;
+  //   //this._addPerformanceEntries(transaction);
+  // }
 
   /**
    * Uses logger.log to log things in the SDK or as breadcrumbs if defined in options
