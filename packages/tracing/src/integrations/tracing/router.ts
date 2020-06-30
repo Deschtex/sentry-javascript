@@ -3,6 +3,8 @@ import { addInstrumentationHandler, getGlobalObject, timestampWithMs } from '@se
 
 import { Transaction } from '../../transaction';
 
+import { Location as LocationType } from './types';
+
 const global = getGlobalObject<Window>();
 
 /**
@@ -42,7 +44,7 @@ export interface TracingRouterOptions {
    *
    * @param name the current name of the pageload/navigation transaction
    */
-  beforeNavigate(name: string): string | null;
+  beforeNavigate(name: LocationType): string | null;
 }
 
 /** JSDOC */
@@ -77,7 +79,7 @@ export class TracingRouter implements RoutingInstrumentation {
 
     let name: string | null = window.location.pathname;
     if (this.options.beforeNavigate) {
-      name = this.options.beforeNavigate(name);
+      name = this.options.beforeNavigate(window.location);
 
       // if beforeNavigate returns null, we should not start a transaction.
       if (name === null) {

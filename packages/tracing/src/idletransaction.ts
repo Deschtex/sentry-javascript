@@ -1,17 +1,16 @@
 // tslint:disable:max-classes-per-file
 import { Hub } from '@sentry/hub';
 import { TransactionContext } from '@sentry/types';
-import { timestampWithMs, logger } from '@sentry/utils';
+import { logger, timestampWithMs } from '@sentry/utils';
 
 import { Span } from './span';
 import { SpanStatus } from './spanstatus';
 import { SpanRecorder, Transaction } from './transaction';
-import { BrowserTracing } from './integrations/browsertracing';
 
 /**
  * @inheritDoc
  */
-class IdleTransactionSpanRecorder extends SpanRecorder {
+export class IdleTransactionSpanRecorder extends SpanRecorder {
   private readonly _pushActivity?: (id: string) => void;
   private readonly _popActivity?: (id: string) => void;
 
@@ -25,8 +24,10 @@ class IdleTransactionSpanRecorder extends SpanRecorder {
    * @inheritDoc
    */
   public add(span: Span): void {
+    // tslint:disable-next-line: no-unbound-method
+    const oldFinish: Function = span.finish;
     span.finish = (endTimestamp?: number) => {
-      span.finish(endTimestamp);
+      oldFinish(endTimestamp);
       if (this._popActivity) {
         this._popActivity(span.spanId);
       }
@@ -47,7 +48,7 @@ export class IdleTransaction extends Transaction {
   /**
    * Activities store a list of active spans
    */
-  public _activities: Record<string, boolean> = {};
+  public activities: Record<string, boolean> = {};
 
   private _heartbeatTimer: number = 0;
 
@@ -64,32 +65,34 @@ export class IdleTransaction extends Transaction {
   }
 
   /**
-   * Checks when entries of this._activities are not changing for 3 beats.
+   * Checks when entries of this.activities are not changing for 3 beats.
    * If this occurs we finish the transaction.
    */
   private _beat(): void {
     clearTimeout(this._heartbeatTimer);
-    const keys = Object.keys(this._activities);
-    if (keys.length) {
-      const heartbeatString = keys.reduce((prev: string, current: string) => prev + current);
-      if (heartbeatString === this._prevHeartbeatString) {
-        this._heartbeatCounter++;
-      } else {
-        this._heartbeatCounter = 0;
-      }
-      if (this._heartbeatCounter >= 3) {
-        logger.log(
-          `[Tracing] Transaction: ${
-            SpanStatus.Cancelled
-          } -> Heartbeat safeguard kicked in since content hasn't changed for 3 beats`,
-        );
-        this.setStatus(SpanStatus.DeadlineExceeded);
-        this.setTag('heartbeat', 'failed');
-        this._finishIdleTransaction(timestampWithMs());
-      }
-      this._prevHeartbeatString = heartbeatString;
+    const keys = Object.keys(this.activities);
+    const heartbeatString = keys.length ? keys.reduce((prev: string, current: string) => prev + current) : '';
+
+    if (heartbeatString === this._prevHeartbeatString) {
+      this._heartbeatCounter++;
+    } else {
+      this._heartbeatCounter = 1;
     }
-    this._pingHeartbeat();
+
+    this._prevHeartbeatString = heartbeatString;
+
+    if (this._heartbeatCounter >= 3) {
+      logger.log(
+        `[Tracing] Transaction: ${
+          SpanStatus.Cancelled
+        } -> Heartbeat safeguard kicked in since content hasn't changed for 3 beats`,
+      );
+      this.setStatus(SpanStatus.DeadlineExceeded);
+      this.setTag('heartbeat', 'failed');
+      this._finishIdleTransaction(timestampWithMs());
+    } else {
+      this._pingHeartbeat();
+    }
   }
 
   /**
@@ -131,6 +134,7 @@ export class IdleTransaction extends Transaction {
 
       logger.log('[Tracing] flushing IdleTransaction');
       this.finish();
+      this._finished = true;
     } else {
       logger.log('[Tracing] No active IdleTransaction');
     }
@@ -141,7 +145,7 @@ export class IdleTransaction extends Transaction {
    * @param spanId The span id that represents the activity
    */
   private _pushActivity(spanId: string): void {
-    this._activities[spanId] = true;
+    this.activities[spanId] = true;
   }
 
   /**
@@ -149,12 +153,12 @@ export class IdleTransaction extends Transaction {
    * @param spanId The span id that represents the activity
    */
   private _popActivity(spanId: string): void {
-    if (this._activities[spanId]) {
+    if (this.activities[spanId]) {
       // tslint:disable-next-line: no-dynamic-delete
-      delete this._activities[spanId];
+      delete this.activities[spanId];
     }
 
-    const count = Object.keys(this._activities).length;
+    const count = Object.keys(this.activities).length;
     if (count === 0) {
       const timeout = this._idleTimeout;
       // We need to add the timeout here to have the real endtimestamp of the transaction
@@ -171,8 +175,18 @@ export class IdleTransaction extends Transaction {
    */
   public initSpanRecorder(maxlen?: number): void {
     if (!this.spanRecorder) {
+      const pushActivity = (id: string) => {
+        if (id !== this.spanId) {
+          this._pushActivity(id);
+        }
+      };
+      const popActivity = (id: string) => {
+        if (id !== this.spanId) {
+          this._popActivity(id);
+        }
+      };
       // tslint:disable-next-line: no-unbound-method
-      this.spanRecorder = new IdleTransactionSpanRecorder(maxlen, this._popActivity, this._pushActivity);
+      this.spanRecorder = new IdleTransactionSpanRecorder(maxlen, pushActivity, popActivity);
     }
     this.spanRecorder.add(this);
   }
