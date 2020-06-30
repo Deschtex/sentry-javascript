@@ -1,6 +1,7 @@
 import { Hub } from '@sentry/hub';
 import { addInstrumentationHandler, getGlobalObject, timestampWithMs } from '@sentry/utils';
 
+import { IdleTransaction } from '../../idletransaction';
 import { Transaction } from '../../transaction';
 
 import { Location as LocationType } from './types';
@@ -44,7 +45,7 @@ export interface TracingRouterOptions {
    *
    * @param name the current name of the pageload/navigation transaction
    */
-  beforeNavigate(name: LocationType): string | null;
+  beforeNavigate(location: LocationType): string | null;
 }
 
 /** JSDOC */
@@ -53,7 +54,7 @@ export interface RoutingInstrumentation {
   /**
    * init the routing instrumentation
    */
-  init(hub: Hub, idleTimeout: number): void;
+  init(hub: Hub, idleTimeout: number, beforeFinish?: (transactionSpan: IdleTransaction) => void): void;
 }
 
 export type RoutingInstrumentationClass = new (_options?: TracingRouterOptions) => RoutingInstrumentation;
@@ -63,7 +64,7 @@ export class TracingRouter implements RoutingInstrumentation {
   /** JSDoc */
   public options: Partial<TracingRouterOptions> = {};
 
-  private _activeTransaction?: Transaction;
+  private _activeTransaction?: IdleTransaction;
 
   public constructor(_options?: TracingRouterOptions) {
     if (_options) {
@@ -72,7 +73,7 @@ export class TracingRouter implements RoutingInstrumentation {
   }
 
   /** JSDOC */
-  private _startIdleTransaction(hub: Hub, op: string, idleTimeout: number): Transaction | undefined {
+  private _startIdleTransaction(hub: Hub, op: string, idleTimeout: number): IdleTransaction | undefined {
     if (!global || !global.location || !hub) {
       return undefined;
     }
@@ -94,11 +95,7 @@ export class TracingRouter implements RoutingInstrumentation {
         trimEnd: true,
       },
       idleTimeout,
-    ) as Transaction;
-
-    // We set the transaction here on the scope so error events pick up the trace
-    // context and attach it to the error.
-    hub.configureScope(scope => scope.setSpan(this._activeTransaction));
+    ) as IdleTransaction;
 
     return this._activeTransaction;
   }
@@ -108,9 +105,12 @@ export class TracingRouter implements RoutingInstrumentation {
    * @param hub The hub associated with the pageload/navigation transactions
    * @param idleTimeout The timeout for the transactions
    */
-  public init(hub: Hub, idleTimeout: number): void {
+  public init(hub: Hub, idleTimeout: number, beforeFinish?: (transactionSpan: IdleTransaction) => void): void {
     if (this.options.startTransactionOnPageLoad) {
       this._activeTransaction = this._startIdleTransaction(hub, 'pageload', idleTimeout);
+      if (this._activeTransaction && beforeFinish) {
+        this._activeTransaction.beforeFinish(beforeFinish);
+      }
     }
 
     addInstrumentationHandler({
@@ -120,6 +120,9 @@ export class TracingRouter implements RoutingInstrumentation {
             this._activeTransaction.finish(timestampWithMs());
           }
           this._activeTransaction = this._startIdleTransaction(hub, 'navigation', idleTimeout);
+          if (this._activeTransaction) {
+            this._activeTransaction.beforeFinish(beforeFinish);
+          }
         }
       },
       type: 'history',

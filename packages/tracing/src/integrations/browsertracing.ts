@@ -11,6 +11,7 @@ import {
   TracingRouterOptions,
   TracingRouter,
 } from './tracing/router';
+import { Location as LocationType } from './tracing/types';
 
 /**
  * TODO: Figure out Tracing._resetActiveTransaction()
@@ -96,7 +97,9 @@ export type BrowserTracingOptions = {
     writeAsBreadcrumbs: boolean;
     spanDebugTimingInfo: boolean;
   };
-};
+
+  routerTracing: RoutingInstrumentationClass;
+} & TracingRouterOptions;
 
 const defaultTracingOrigins = ['localhost', /^\//];
 
@@ -121,15 +124,15 @@ export class BrowserTracing implements Integration {
    */
   private static _getCurrentHub?: () => Hub;
 
-  public constructor(_options?: Partial<BrowserTracingOptions & TracingRouterOptions>) {
-    // const routerDefaults = {
-    //   beforeNavigate(name: string): string | null {
-    //     return name;
-    //   },
-    //   idleTimeout: 500,
-    //   startTransactionOnLocationChange: true,
-    //   startTransactionOnPageLoad: true,
-    // };
+  public constructor(_options?: Partial<BrowserTracingOptions>) {
+    const routerDefaults: TracingRouterOptions = {
+      beforeNavigate(location: LocationType): string | null {
+        return location.pathname;
+      },
+      idleTimeout: 500,
+      startTransactionOnLocationChange: true,
+      startTransactionOnPageLoad: true,
+    };
 
     const defaults = {
       debug: {
@@ -138,9 +141,11 @@ export class BrowserTracing implements Integration {
       },
       markBackgroundTransactions: true,
       maxTransactionDuration: 600,
+      routerTracing: TracingRouter,
       tracingOrigins: defaultTracingOrigins,
     };
     BrowserTracing.options = {
+      ...routerDefaults,
       ...defaults,
       ..._options,
     };
@@ -153,6 +158,22 @@ export class BrowserTracing implements Integration {
     BrowserTracing._getCurrentHub = getCurrentHub;
 
     const hub = getCurrentHub();
+
+    const {
+      beforeNavigate,
+      idleTimeout,
+      startTransactionOnLocationChange,
+      startTransactionOnPageLoad,
+    } = BrowserTracing.options;
+
+    const routerTracing = new BrowserTracing.options.routerTracing({
+      beforeNavigate,
+      idleTimeout,
+      startTransactionOnLocationChange,
+      startTransactionOnPageLoad,
+    });
+
+    routerTracing.init(hub, idleTimeout);
 
     // This EventProcessor makes sure that the transaction is not longer than maxTransactionDuration
     addGlobalEventProcessor((event: Event) => {

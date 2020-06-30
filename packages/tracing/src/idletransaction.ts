@@ -62,6 +62,12 @@ export class IdleTransaction extends Transaction {
     super(transactionContext, hub);
     this._idleTimeout = idleTimeout;
 
+    if (hub) {
+      // We set the transaction here on the scope so error events pick up the trace
+      // context and attach it to the error.
+      hub.configureScope(scope => scope.setSpan(this));
+    }
+
     // Start heartbeat so that transactions do not run forever.
     this._pingHeartbeat();
   }
