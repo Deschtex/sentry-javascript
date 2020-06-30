@@ -120,7 +120,7 @@ export class TracingRouter implements RoutingInstrumentation {
             this._activeTransaction.finish(timestampWithMs());
           }
           this._activeTransaction = this._startIdleTransaction(hub, 'navigation', idleTimeout);
-          if (this._activeTransaction) {
+          if (this._activeTransaction && beforeFinish) {
             this._activeTransaction.beforeFinish(beforeFinish);
           }
         }

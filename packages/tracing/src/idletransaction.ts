@@ -58,9 +58,12 @@ export class IdleTransaction extends Transaction {
 
   private _finishCallback: Function | undefined = undefined;
 
+  private readonly _idleHub: Hub | undefined;
+
   public constructor(transactionContext: TransactionContext, hub?: Hub, idleTimeout: number = 500) {
     super(transactionContext, hub);
     this._idleTimeout = idleTimeout;
+    this._idleHub = hub;
 
     if (hub) {
       // We set the transaction here on the scope so error events pick up the trace
@@ -113,6 +116,20 @@ export class IdleTransaction extends Transaction {
   }
 
   /**
+   * Unsets the current active transaction + activities
+   */
+  private _resetActiveTransaction(): void {
+    if (this._idleHub) {
+      const scope = this._idleHub.getScope();
+      if (scope) {
+        if (scope.getSpan() === this) {
+          scope.setSpan(undefined);
+        }
+      }
+    }
+  }
+
+  /**
    * Finish the current active idle transaction
    */
   private _finishIdleTransaction(endTimestamp: number): void {
@@ -146,6 +163,7 @@ export class IdleTransaction extends Transaction {
 
       logger.log('[Tracing] flushing IdleTransaction');
       this.finish();
+      this._resetActiveTransaction();
     } else {
       logger.log('[Tracing] No active IdleTransaction');
     }

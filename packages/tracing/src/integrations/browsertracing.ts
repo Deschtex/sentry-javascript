@@ -29,31 +29,6 @@ import { Location as LocationType } from './tracing/types';
  *  - Provide option to to extend to all transactions??
  * TODO: Tracing._addPerformanceEntries
  *  - This is a beforeFinish() hook here
- * Thoughts:
- *  - This might be that we monkeypatch it here?
- *  - Ex. say _activeTransaction.finish = () => { finish() and something }
- *  - BrowserTracing wants to hook onto idleTransaction lifecyle, do something before and after
- *  - Should we expose lifecycle hooks?
- *
- * Ex. Router starts a transaction
- * - we then have a function, onCreate() there?
- * - we also pass in a onFinish() there?
- * - I like this because the router is concerned with the pageload/navigation
- * - So react router or angular router would extend TracingRouter, and not worry about
- * - onFinish or onCreate
- * - Actually NO -> this shouldn't work like this
- *
- * - These spans should be on any active transaction right?
- * - The whole point of this is that we should see stuff like
- * - performance marks on any transaction that is on the scope
- * - So we have to be able to register listeners here somehow?
- * - a global "beforeFinish" transaction
- * - This could also be where a user can manually filter to make a nil transaction
- * - Like beforeSend, we have beforeFinish for transactions
- *
- * - Here is how this helps us:
- *  -> we register all our callbacks either at pageload, or on a beforeFinish
- *  -> beforeFinish, we can then make some all the spans have performance marks etc.
  */
 
 /**
